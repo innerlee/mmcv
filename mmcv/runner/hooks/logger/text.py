@@ -45,6 +45,7 @@ class TextLoggerHook(LoggerHook):
                 log_str += ('time: {:.3f}, data_time: {:.3f}, '.format(
                     log_dict['time'], log_dict['data_time']))
                 log_str += 'memory: {}, '.format(log_dict['memory'])
+
         else:
             log_str = 'Epoch({}) [{}][{}]\t'.format(log_dict['mode'],
                                                     log_dict['epoch'] - 1,
@@ -98,10 +99,15 @@ class TextLoggerHook(LoggerHook):
             # statistic memory
             if torch.cuda.is_available():
                 log_dict['memory'] = self._get_max_memory(runner)
+            if hasattr(runner, 'top1') and hasattr(runner, 'top5'):
+                log_dict['top1(epoch)'] = runner.top1.avg
+                log_dict['top5(epoch)'] = runner.top5.avg
+
         for name, val in runner.log_buffer.output.items():
             if name in ['time', 'data_time']:
                 continue
             log_dict[name] = val
+
 
         self._log_info(log_dict, runner)
         self._dump_log(log_dict, runner)
