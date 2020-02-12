@@ -9,6 +9,7 @@ import mmcv
 from . import hooks
 from .checkpoint import load_checkpoint, save_checkpoint
 from .dist_utils import get_dist_info
+from .log_buffer import LogBuffer, AverageMeter
 from .hooks import (CheckpointHook, Hook, IterTimerHook, LrUpdaterHook,
                     OptimizerHook, lr_updater)
 from .log_buffer import LogBuffer
@@ -278,6 +279,12 @@ class Runner(object):
             if 'log_vars' in outputs:
                 self.log_buffer.update(outputs['log_vars'],
                                        outputs['num_samples'])
+                if 'acc_top1' in outputs['log_vars'] and 'acc_top5' in outputs['log_vars']:
+                    self.top1.update(outputs['log_vars']['acc_top1'],
+                                     outputs['num_samples'])
+                    self.top5.update(outputs['log_vars']['acc_top5'],
+                                     outputs['num_samples'])
+
             self.outputs = outputs
             self.call_hook('after_train_iter')
             self._iter += 1

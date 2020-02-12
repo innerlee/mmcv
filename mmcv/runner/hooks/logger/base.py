@@ -51,6 +51,8 @@ class LoggerHook(Hook):
             self.log(runner)
             if self.reset_flag:
                 runner.log_buffer.clear_output()
+                runner.top1.reset()
+                runner.top5.reset()
 
     def after_val_epoch(self, runner):
         runner.log_buffer.average()

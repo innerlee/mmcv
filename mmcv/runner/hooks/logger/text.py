@@ -101,6 +101,10 @@ class TextLoggerHook(LoggerHook):
             # statistic memory
             if torch.cuda.is_available():
                 log_dict['memory'] = self._get_max_memory(runner)
+            if hasattr(runner, 'top1') and hasattr(runner, 'top5'):
+                log_dict['top1(epoch)'] = runner.top1.avg
+                log_dict['top5(epoch)'] = runner.top5.avg
+
         for name, val in runner.log_buffer.output.items():
             if name in ['time', 'data_time']:
                 continue
