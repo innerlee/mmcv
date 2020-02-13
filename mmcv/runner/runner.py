@@ -74,6 +74,8 @@ class Runner(object):
         else:
             self.logger = logger
         self.log_buffer = LogBuffer()
+        self.top1 = AverageMeter()  # ugly
+        self.top5 = AverageMeter()  # ugly
 
         if meta is not None:
             assert isinstance(meta, dict), '"meta" must be a dict or None'
