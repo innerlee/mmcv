@@ -193,6 +193,14 @@ def load_checkpoint(model,
     # strip prefix of state_dict
     if list(state_dict.keys())[0].startswith('module.'):
         state_dict = {k[7:]: v for k, v in checkpoint['state_dict'].items()}
+
+    # if list(state_dict.keys())[0].startswith('base_model.'):
+    # for
+
+    state_dict = { k.replace('base_model','backbone') if k.startswith('base_model') else k :v for k, v in state_dict.items() }
+    state_dict = { k.replace('new_fc','cls_head.fc_cls') if k.startswith('new_fc') or k.startswith('cls_head.fc_cls2') else k :v for k, v in state_dict.items() }
+
+    # state_dict = { k.replace('new_fc',''): v for k, v in state_dict.items() }
     # load state_dict
     if hasattr(model, 'module'):
         load_state_dict(model.module, state_dict, strict, logger)
