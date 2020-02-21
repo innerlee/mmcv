@@ -167,7 +167,8 @@ def load_checkpoint(model,
                     filename,
                     map_location=None,
                     strict=False,
-                    logger=None):
+                    logger=None,
+                    overlap = 2):
     """Load checkpoint from a file or URI.
 
     Args:
@@ -201,6 +202,39 @@ def load_checkpoint(model,
     state_dict = { k.replace('new_fc','cls_head.fc_cls') if k.startswith('new_fc') else k :v for k, v in state_dict.items() }
     state_dict = { k.replace('cls_head.fc_cls2','cls_head.fc_cls') if k.startswith('cls_head.fc_cls2') else k :v for k, v in state_dict.items() }
 
+    if (overlap == 2):
+        print('===>the pretrained model dominates')
+        model_state = model.state_dict()
+        pretrained_state = {}
+        for k, v in state_dict.items():
+            newk = k.replace('net.', '')
+            if newk in model_state:
+                pretrained_state[newk] = v
+            else:
+                pretrained_state[k] = v
+
+
+        # pretrained_state = {k: v for k, v in state_dict.items() if
+        #                     k in model_state and v.size() == model_state[k].size()}
+        model_state.update(pretrained_state)
+
+
+    elif (overlap == 1):
+        # the pretrained model dominate
+        print('===>the origin model dominates')
+        model_state = model.state_dict()
+        pretrained_state = {}
+        for k, v in model_state.items():
+            newk = k.replace('net.', '')
+            if newk in state_dict:
+                pretrained_state[k] = state_dict[newk]
+            # else:
+            #     pretrained_state[k] = v
+
+
+        # pretrained_state = {k: v for k, v in state_dict.items() if
+        #                     k in model_state and v.size() == model_state[k].size()}
+        model_state.update(pretrained_state)
 
 
     # state_dict = { k.replace('new_fc',''): v for k, v in state_dict.items() }

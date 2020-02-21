@@ -20,6 +20,8 @@ class TestImage(object):
         cls.gray_img_path = osp.join(
             osp.dirname(__file__), 'data/grayscale.jpg')
         cls.img = cv2.imread(cls.img_path)
+        cls.mean = np.float32(np.array([123.675, 116.28, 103.53]))
+        cls.std = np.float32(np.array([58.395, 57.12, 57.375]))
 
     def assert_img_equal(self, img, ref_img, ratio_thr=0.999):
         assert img.shape == ref_img.shape
@@ -29,24 +31,80 @@ class TestImage(object):
         assert np.sum(diff <= 1) / float(area) > ratio_thr
 
     def test_imread(self):
-        img = mmcv.imread(self.img_path)
-        assert img.shape == (300, 400, 3)
-        img = mmcv.imread(self.img_path, 'grayscale')
-        assert img.shape == (300, 400)
-        img = mmcv.imread(self.gray_img_path)
-        assert img.shape == (300, 400, 3)
-        img = mmcv.imread(self.gray_img_path, 'unchanged')
-        assert img.shape == (300, 400)
-        img = mmcv.imread(img)
-        assert_array_equal(img, mmcv.imread(img))
+        # backend cv2
+        mmcv.use_backend('cv2')
+
+        img_cv2_color_bgr = mmcv.imread(self.img_path)
+        assert img_cv2_color_bgr.shape == (300, 400, 3)
+        img_cv2_color_rgb = mmcv.imread(self.img_path, channel_order='rgb')
+        assert img_cv2_color_rgb.shape == (300, 400, 3)
+        assert_array_equal(img_cv2_color_rgb[:, :, ::-1], img_cv2_color_bgr)
+        img_cv2_grayscale1 = mmcv.imread(self.img_path, 'grayscale')
+        assert img_cv2_grayscale1.shape == (300, 400)
+        img_cv2_grayscale2 = mmcv.imread(self.gray_img_path)
+        assert img_cv2_grayscale2.shape == (300, 400, 3)
+        img_cv2_unchanged = mmcv.imread(self.gray_img_path, 'unchanged')
+        assert img_cv2_unchanged.shape == (300, 400)
+        img_cv2_unchanged = mmcv.imread(img_cv2_unchanged)
+        assert_array_equal(img_cv2_unchanged, mmcv.imread(img_cv2_unchanged))
         with pytest.raises(TypeError):
             mmcv.imread(1)
 
+        # backend turbojpeg
+        mmcv.use_backend('turbojpeg')
+
+        img_turbojpeg_color_bgr = mmcv.imread(self.img_path)
+        assert img_turbojpeg_color_bgr.shape == (300, 400, 3)
+        assert_array_equal(img_turbojpeg_color_bgr, img_cv2_color_bgr)
+
+        img_turbojpeg_color_rgb = mmcv.imread(
+            self.img_path, channel_order='rgb')
+        assert img_turbojpeg_color_rgb.shape == (300, 400, 3)
+        assert_array_equal(img_turbojpeg_color_rgb, img_cv2_color_rgb)
+
+        with pytest.raises(ValueError):
+            mmcv.imread(self.img_path, channel_order='unsupport_order')
+
+        img_turbojpeg_grayscale1 = mmcv.imread(self.img_path, flag='grayscale')
+        assert img_turbojpeg_grayscale1.shape == (300, 400)
+        assert_array_equal(img_turbojpeg_grayscale1, img_cv2_grayscale1)
+
+        img_turbojpeg_grayscale2 = mmcv.imread(self.gray_img_path)
+        assert img_turbojpeg_grayscale2.shape == (300, 400, 3)
+        assert_array_equal(img_turbojpeg_grayscale2, img_cv2_grayscale2)
+
+        img_turbojpeg_grayscale2 = mmcv.imread(img_turbojpeg_grayscale2)
+        assert_array_equal(img_turbojpeg_grayscale2,
+                           mmcv.imread(img_turbojpeg_grayscale2))
+
+        with pytest.raises(ValueError):
+            mmcv.imread(self.gray_img_path, 'unchanged')
+
+        with pytest.raises(TypeError):
+            mmcv.imread(1)
+
+        with pytest.raises(AssertionError):
+            mmcv.use_backend('unsupport_backend')
+
+        mmcv.use_backend('cv2')
+
     def test_imfrombytes(self):
+        # backend cv2
+        mmcv.use_backend('cv2')
         with open(self.img_path, 'rb') as f:
             img_bytes = f.read()
-        img = mmcv.imfrombytes(img_bytes)
-        assert img.shape == (300, 400, 3)
+        img_cv2 = mmcv.imfrombytes(img_bytes)
+        assert img_cv2.shape == (300, 400, 3)
+
+        # backend turbojpeg
+        mmcv.use_backend('turbojpeg')
+        with open(self.img_path, 'rb') as f:
+            img_bytes = f.read()
+        img_turbojpeg = mmcv.imfrombytes(img_bytes)
+        assert img_turbojpeg.shape == (300, 400, 3)
+        assert_array_equal(img_cv2, img_turbojpeg)
+
+        mmcv.use_backend('cv2')
 
     def test_imwrite(self):
         img = mmcv.imread(self.img_path)
@@ -55,6 +113,37 @@ class TestImage(object):
         rewrite_img = mmcv.imread(out_file)
         os.remove(out_file)
         self.assert_img_equal(img, rewrite_img)
+
+    def test_imnormalize(self):
+        rgbimg = self.img[:, :, ::-1]
+        baseline = (rgbimg - self.mean) / self.std
+        img = mmcv.imnormalize(self.img, self.mean, self.std)
+        assert np.allclose(img, baseline)
+        assert id(img) != id(self.img)
+        img = mmcv.imnormalize(rgbimg, self.mean, self.std, to_rgb=False)
+        assert np.allclose(img, baseline)
+        assert id(img) != id(rgbimg)
+
+    def test_imnormalize_(self):
+        img_for_normalize = np.float32(self.img.copy())
+        rgbimg_for_normalize = np.float32(self.img[:, :, ::-1].copy())
+        baseline = (rgbimg_for_normalize - self.mean) / self.std
+        img = mmcv.imnormalize_(img_for_normalize, self.mean, self.std)
+        assert np.allclose(img_for_normalize, baseline)
+        assert id(img) == id(img_for_normalize)
+        img = mmcv.imnormalize_(
+            rgbimg_for_normalize, self.mean, self.std, to_rgb=False)
+        assert np.allclose(img, baseline)
+        assert id(img) == id(rgbimg_for_normalize)
+
+    def test_imdenormalize(self):
+        normimg = (self.img[:, :, ::-1] - self.mean) / self.std
+        rgbbaseline = (normimg * self.std + self.mean)
+        bgrbaseline = rgbbaseline[:, :, ::-1]
+        img = mmcv.imdenormalize(normimg, self.mean, self.std)
+        assert np.allclose(img, bgrbaseline)
+        img = mmcv.imdenormalize(normimg, self.mean, self.std, to_bgr=False)
+        assert np.allclose(img, rgbbaseline)
 
     def test_bgr2gray(self):
         in_img = np.random.rand(10, 10, 3).astype(np.float32)
@@ -237,6 +326,57 @@ class TestImage(object):
         for i in range(h):
             for j in range(w):
                 assert flipped_img[i, j] == img[h - 1 - i, j]
+
+    def test_imflip_(self):
+        # test horizontal flip (color image)
+        img = np.random.rand(80, 60, 3)
+        h, w, c = img.shape
+        img_for_flip = img.copy()
+        flipped_img = mmcv.imflip_(img_for_flip)
+        assert flipped_img.shape == img.shape
+        assert flipped_img.shape == img_for_flip.shape
+        assert id(flipped_img) == id(img_for_flip)
+        for i in range(h):
+            for j in range(w):
+                for k in range(c):
+                    assert flipped_img[i, j, k] == img[i, w - 1 - j, k]
+                    assert flipped_img[i, j, k] == img_for_flip[i, j, k]
+
+        # test vertical flip (color image)
+        img_for_flip = img.copy()
+        flipped_img = mmcv.imflip_(img_for_flip, direction='vertical')
+        assert flipped_img.shape == img.shape
+        assert flipped_img.shape == img_for_flip.shape
+        assert id(flipped_img) == id(img_for_flip)
+        for i in range(h):
+            for j in range(w):
+                for k in range(c):
+                    assert flipped_img[i, j, k] == img[h - 1 - i, j, k]
+                    assert flipped_img[i, j, k] == img_for_flip[i, j, k]
+
+        # test horizontal flip (grayscale image)
+        img = np.random.rand(80, 60)
+        h, w = img.shape
+        img_for_flip = img.copy()
+        flipped_img = mmcv.imflip_(img_for_flip)
+        assert flipped_img.shape == img.shape
+        assert flipped_img.shape == img_for_flip.shape
+        assert id(flipped_img) == id(img_for_flip)
+        for i in range(h):
+            for j in range(w):
+                assert flipped_img[i, j] == img[i, w - 1 - j]
+                assert flipped_img[i, j] == img_for_flip[i, j]
+
+        # test vertical flip (grayscale image)
+        img_for_flip = img.copy()
+        flipped_img = mmcv.imflip_(img_for_flip, direction='vertical')
+        assert flipped_img.shape == img.shape
+        assert flipped_img.shape == img_for_flip.shape
+        assert id(flipped_img) == id(img_for_flip)
+        for i in range(h):
+            for j in range(w):
+                assert flipped_img[i, j] == img[h - 1 - i, j]
+                assert flipped_img[i, j] == img_for_flip[i, j]
 
     def test_imcrop(self):
         # yapf: disable
