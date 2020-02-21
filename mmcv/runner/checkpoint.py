@@ -198,7 +198,10 @@ def load_checkpoint(model,
     # for
 
     state_dict = { k.replace('base_model','backbone') if k.startswith('base_model') else k :v for k, v in state_dict.items() }
-    state_dict = { k.replace('new_fc','cls_head.fc_cls') if k.startswith('new_fc') or k.startswith('cls_head.fc_cls2') else k :v for k, v in state_dict.items() }
+    state_dict = { k.replace('new_fc','cls_head.fc_cls') if k.startswith('new_fc') else k :v for k, v in state_dict.items() }
+    state_dict = { k.replace('cls_head.fc_cls2','cls_head.fc_cls') if k.startswith('cls_head.fc_cls2') else k :v for k, v in state_dict.items() }
+
+
 
     # state_dict = { k.replace('new_fc',''): v for k, v in state_dict.items() }
     # load state_dict

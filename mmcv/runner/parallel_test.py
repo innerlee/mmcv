@@ -72,4 +72,4 @@ def parallel_test(model_cls,
     for worker in workers:
         worker.terminate()
 
-    return results
+    return results, None
