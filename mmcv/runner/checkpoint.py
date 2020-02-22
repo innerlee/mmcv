@@ -205,38 +205,51 @@ def load_checkpoint(model,
     if (overlap == 2):
         print('===>the pretrained model dominates')
         model_state = model.state_dict()
-        pretrained_state = {}
+        # pretrained_state = {}
+        if list(model_state.keys())[0].startswith('module.'):
+            model_state = {k[7:]: v for k, v in model_state.items()}
+
+        replace_list = {}
         for k, v in state_dict.items():
-            newk = k.replace('net.', '')
-            if newk in model_state:
-                pretrained_state[newk] = v
-            else:
-                pretrained_state[k] = v
+            # newk = k.replace('net.', '')
+            if 'net' in k:
+                if k not in model_state:
+                    replace_list[k] = v
 
-
-        # pretrained_state = {k: v for k, v in state_dict.items() if
-        #                     k in model_state and v.size() == model_state[k].size()}
-        model_state.update(pretrained_state)
-
-
-    elif (overlap == 1):
-        # the pretrained model dominate
-        print('===>the origin model dominates')
-        model_state = model.state_dict()
-        pretrained_state = {}
-        for k, v in model_state.items():
-            newk = k.replace('net.', '')
-            if newk in state_dict:
-                pretrained_state[k] = state_dict[newk]
+            # if newk in model_state:
+            #     pretrained_state[newk] = v
             # else:
             #     pretrained_state[k] = v
+            # if 'net' in k:
+        print('===>replaced names: ', replace_list.keys())
+        for k, v in replace_list.items():
+            del state_dict[k]
+            state_dict[k.replace('net.', '')] = v
 
 
         # pretrained_state = {k: v for k, v in state_dict.items() if
         #                     k in model_state and v.size() == model_state[k].size()}
-        model_state.update(pretrained_state)
+        # state_dict.update(pretrained_state)
 
 
+    # elif (overlap == 1):
+    #     # the pretrained model dominate
+    #     print('===>the origin model dominates')
+    #     model_state = model.state_dict()
+    #     pretrained_state = {}
+    #     for k, v in model_state.items():
+    #         newk = k.replace('net.', '')
+    #         if newk in state_dict:
+    #             pretrained_state[k] = state_dict[newk]
+    #         # else:
+    #         #     pretrained_state[k] = v
+    #
+    #
+    #     # pretrained_state = {k: v for k, v in state_dict.items() if
+    #     #                     k in model_state and v.size() == model_state[k].size()}
+    #     model_state.update(pretrained_state)
+
+    checkpoint['state_dict'] = state_dict
     # state_dict = { k.replace('new_fc',''): v for k, v in state_dict.items() }
     # load state_dict
     if hasattr(model, 'module'):
