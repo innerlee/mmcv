@@ -135,6 +135,87 @@ class Runner(object):
         """int: Maximum training iterations."""
         return self._max_iters
 
+    def get_optim_policies(self, optimizer):
+        first_conv_weight = []
+        first_conv_bias = []
+        normal_weight = []
+        normal_bias = []
+        lr5_weight = []
+        lr10_bias = []
+        bn = []
+        custom_ops = []
+        if ('fc_lr5' in optimizer.keys()):
+            fc_lr5 = optimizer['fc_lr5']
+            del  optimizer['fc_lr5']
+        else:
+            fc_lr5 = False
+
+        if ('except_first' in optimizer.keys()):
+            except_first = optimizer['except_first']
+            del optimizer['except_first']
+        else:
+            except_first = False
+
+        conv_cnt = 0
+        bn_cnt = 0
+        for m in self.model.modules():
+            if isinstance(m, torch.nn.Conv2d) or isinstance(m, torch.nn.Conv1d) or isinstance(m, torch.nn.Conv3d):
+                ps = list(m.parameters())
+                conv_cnt += 1
+                if conv_cnt == 1:
+                    first_conv_weight.append(ps[0])
+                    if len(ps) == 2:
+                        first_conv_bias.append(ps[1])
+                else:
+                    normal_weight.append(ps[0])
+                    if len(ps) == 2:
+                        normal_bias.append(ps[1])
+            elif isinstance(m, torch.nn.Linear):
+                ps = list(m.parameters())
+                if fc_lr5:
+                    lr5_weight.append(ps[0])
+                else:
+                    normal_weight.append(ps[0])
+                if len(ps) == 2:
+                    if fc_lr5:
+                        lr10_bias.append(ps[1])
+                    else:
+                        normal_bias.append(ps[1])
+
+            elif isinstance(m, torch.nn.BatchNorm2d):
+                bn_cnt += 1
+                # later BN's are frozen
+                if not except_first or bn_cnt == 1:
+                    bn.extend(list(m.parameters()))
+            elif isinstance(m, torch.nn.BatchNorm3d):
+                bn_cnt += 1
+                # later BN's are frozen
+                if not except_first or bn_cnt == 1:
+                    bn.extend(list(m.parameters()))
+            elif len(m._modules) == 0:
+                if len(list(m.parameters())) > 0:
+                    raise ValueError("New atomic module type: {}. Need to give it a learning policy".format(type(m)))
+
+        return [
+            {'params': first_conv_weight, 'lr_mult': 1, 'decay_mult': 1,
+             'name': "first_conv_weight"},
+            {'params': first_conv_bias, 'lr_mult': 2, 'decay_mult': 0,
+             'name': "first_conv_bias"},
+            {'params': normal_weight, 'lr_mult': 1, 'decay_mult': 1,
+             'name': "normal_weight"},
+            {'params': normal_bias, 'lr_mult': 2, 'decay_mult': 0,
+             'name': "normal_bias"},
+            {'params': bn, 'lr_mult': 1, 'decay_mult': 0,
+             'name': "BN scale/shift"},
+            {'params': custom_ops, 'lr_mult': 1, 'decay_mult': 1,
+             'name': "custom_ops"},
+            # for fc
+            {'params': lr5_weight, 'lr_mult': 5, 'decay_mult': 1,
+             'name': "lr5_weight"},
+            {'params': lr10_bias, 'lr_mult': 10, 'decay_mult': 0,
+             'name': "lr10_bias"},
+        ]
+
     def init_optimizer(self, optimizer):
         """Init the optimizer.
 
@@ -151,8 +232,13 @@ class Runner(object):
             <class 'torch.optim.sgd.SGD'>
         """
         if isinstance(optimizer, dict):
+            get_param = self.get_optim_policies(optimizer)
+            for group in get_param:
+                print(('group: {} has {} params, lr_mult: {}, decay_mult: {}'.format(
+                    group['name'], len(group['params']), group['lr_mult'], group['decay_mult'])))
+
             optimizer = obj_from_dict(optimizer, torch.optim,
-                                      dict(params=self.model.parameters()))
+                                      dict(params=get_param))
         elif not isinstance(optimizer, torch.optim.Optimizer):
             raise TypeError(
                 'optimizer must be either an Optimizer object or a dict, '
